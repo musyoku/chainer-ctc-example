@@ -122,8 +122,8 @@ def main():
 	train_indices = np.arange(len(train_data), dtype=int)
 
 	xp = model.xp
-	x_batch_length = xp.full((args.batchsize,), args.sequence_length, dtype=xp.int32)
-	t_batch_length = xp.full((args.batchsize,), args.true_sequence_length, dtype=xp.int32)
+	x_length_batch = xp.full((args.batchsize,), args.sequence_length, dtype=xp.int32)
+	t_length_batch = xp.full((args.batchsize,), args.true_sequence_length, dtype=xp.int32)
 
 	# optimizer
 	optimizer = optimizers.Adam(args.learning_rate, 0.9)
@@ -150,7 +150,7 @@ def main():
 				y_batch = model(x_batch)	# list of variables
 
 				# compute loss
-				loss = F.connectionist_temporal_classification(y_batch, t_batch, BLANK, x_batch_length, t_batch_length)
+				loss = F.connectionist_temporal_classification(y_batch, t_batch, BLANK, x_length_batch, t_length_batch)
 				optimizer.update(lossfun=lambda: loss)
 
 				sum_loss += float(loss.data)
