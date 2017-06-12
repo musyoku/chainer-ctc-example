@@ -8,6 +8,8 @@ from chainer import functions as F
 from chainer.links import EmbedID, ConvolutionND
 from qrnn import QRNN
 
+BLANK = 0
+
 def compute_character_error_rate(r, h):
 	d = np.zeros((len(r) + 1) * (len(h) + 1), dtype=np.uint8).reshape((len(r) + 1, len(h) + 1))
 	for i in xrange(len(r) + 1):
@@ -28,7 +30,7 @@ def compute_character_error_rate(r, h):
 class Model(chainer.Chain):
 	def __init__(self, vocab_size, ndim_embedding, num_layers, ndim_h, kernel_size=4, pooling="fo", zoneout=0, dropout=0, wgain=1, densely_connected=True):
 		super(Model, self).__init__(
-			embed=EmbedID(vocab_size, ndim_embedding, ignore_label=0),
+			embed=EmbedID(vocab_size, ndim_embedding, ignore_label=BLANK),
 			dense=ConvolutionND(1, ndim_h, vocab_size, ksize=1, stride=1, pad=0)
 		)
 		assert num_layers > 0
@@ -68,7 +70,7 @@ class Model(chainer.Chain):
 		# insert noise at <BLANK> (optional)
 		if add_noise_to_input:
 			noise = xp.random.normal(0, 1, enmbedding.shape)
-			mask = X == 0
+			mask = X == BLANK
 			mask = xp.broadcast_to(xp.expand_dims(mask, 2), noise.shape)
 			enmbedding += noise * mask
 
@@ -148,7 +150,7 @@ def main():
 				y_batch = model(x_batch)	# list of variables
 
 				# compute loss
-				loss = F.connectionist_temporal_classification(y_batch, t_batch, 0, x_batch_length, t_batch_length)
+				loss = F.connectionist_temporal_classification(y_batch, t_batch, BLANK, x_batch_length, t_batch_length)
 				optimizer.update(lossfun=lambda: loss)
 
 				sum_loss += float(loss.data)
@@ -174,7 +176,7 @@ def main():
 			for input_sequence, argmax_sequence, true_sequence in zip(x_batch, y_batch, t_batch):
 				pred_seqence = []
 				for token in argmax_sequence:
-					if token == 0:
+					if token == BLANK:
 						continue
 					pred_seqence.append(int(token))
 				print("true:", true_sequence, "pred:", pred_seqence)
@@ -189,10 +191,10 @@ if __name__ == "__main__":
 	parser.add_argument("--learning-rate", "-lr", type=float, default=0.01)
 	parser.add_argument("--vocab-size", "-vocab", type=int, default=50)
 	parser.add_argument("--num-layers", "-layers", type=int, default=1)
-	parser.add_argument("--ndim-embedding", "-ne", type=int, default=100)
+	parser.add_argument("--ndim-embedding", "-ne", type=int, default=50)
 	parser.add_argument("--ndim-h", "-nh", type=int, default=128)
 	parser.add_argument("--true-sequence-length", "-tseq", type=int, default=5)
-	parser.add_argument("--sequence-length", "-seq", type=int, default=30)
+	parser.add_argument("--sequence-length", "-seq", type=int, default=50)
 	parser.add_argument("--dataset-size", "-size", type=int, default=500)
 	parser.add_argument("--gpu-device", "-g", type=int, default=0) 
 	args = parser.parse_args()
