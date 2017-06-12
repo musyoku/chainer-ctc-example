@@ -156,7 +156,7 @@ def main():
 				sum_loss += float(loss.data)
 
 		# evaluate
-		with chainer.using_config("train", True):
+		with chainer.using_config("train", False):
 			# sample minibatch
 			np.random.shuffle(train_indices)
 			x_batch = train_data[train_indices[:args.batchsize]]
@@ -182,7 +182,7 @@ def main():
 				print("true:", true_sequence, "pred:", pred_seqence)
 				error = compute_character_error_rate(true_sequence.tolist(), pred_seqence)
 				average_error += error
-			print("CER: {} loss: {}".format(int(average_error / args.batchsize * 100), sum_loss / total_loop))
+			print("CER: {} - loss: {} - lr: {:.4e}".format(int(average_error / args.batchsize * 100), sum_loss / total_loop, optimizer.alpha))
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
@@ -194,7 +194,7 @@ if __name__ == "__main__":
 	parser.add_argument("--ndim-embedding", "-ne", type=int, default=50)
 	parser.add_argument("--ndim-h", "-nh", type=int, default=128)
 	parser.add_argument("--true-sequence-length", "-tseq", type=int, default=5)
-	parser.add_argument("--sequence-length", "-seq", type=int, default=50)
+	parser.add_argument("--sequence-length", "-seq", type=int, default=30)
 	parser.add_argument("--dataset-size", "-size", type=int, default=500)
 	parser.add_argument("--gpu-device", "-g", type=int, default=0) 
 	args = parser.parse_args()
