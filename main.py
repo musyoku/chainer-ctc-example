@@ -26,9 +26,9 @@ def compute_character_error_rate(r, h):
 	return float(d[len(r)][len(h)]) / len(r)
 
 class Model(chainer.Chain):
-	def __init__(self, vocab_size, ndim_embedding, num_layers, ndim_h, kernel_size=4, pooling="fo", zoneout=0, dropout=0, wgain=1, densely_connected=False):
+	def __init__(self, vocab_size, ndim_embedding, num_layers, ndim_h, kernel_size=4, pooling="fo", zoneout=0, dropout=0, wgain=1, densely_connected=True):
 		super(Model, self).__init__(
-			embed=EmbedID(vocab_size, ndim_embedding),
+			embed=EmbedID(vocab_size, ndim_embedding, ignore_label=0),
 			dense=ConvolutionND(1, ndim_h, vocab_size, ksize=1, stride=1, pad=0)
 		)
 		assert num_layers > 0
@@ -59,10 +59,19 @@ class Model(chainer.Chain):
 		out_data = rnn(in_data)
 		return out_data
 
-	def __call__(self, X, split_into_variables=True):
+	def __call__(self, X, split_into_variables=True, add_noise_to_input=True):
+		xp = self.xp
 		batchsize = X.shape[0]
 		seq_length = X.shape[1]
 		enmbedding = self.embed(X)
+
+		# insert noise at <BLANK> (optional)
+		if add_noise_to_input:
+			noise = xp.random.normal(0, 1, enmbedding.shape)
+			mask = X == 0
+			mask = xp.broadcast_to(xp.expand_dims(mask, 2), noise.shape)
+			enmbedding += noise * mask
+
 		enmbedding = F.swapaxes(enmbedding, 1, 2)
 		in_data = []
 		if self.ndim_embedding == self.ndim_h:
@@ -92,13 +101,12 @@ class Model(chainer.Chain):
 
 def generate_data():
 	x_batch = np.zeros((args.dataset_size, args.sequence_length), dtype=np.int32)
-	t_batch = np.zeros((args.dataset_size, args.true_sequence_length), dtype=np.int32)
 	for data_idx in xrange(len(x_batch)):
-		indices = np.random.choice(np.arange(args.sequence_length), size=args.true_sequence_length)
+		indices = np.random.choice(np.arange(args.sequence_length), size=args.true_sequence_length, replace=False)
 		tokens = np.random.choice(np.arange(1, args.vocab_size), size=args.true_sequence_length)
-		for token_idx, (t, token) in enumerate(zip(indices, tokens)): 
+		for t, token in zip(indices, tokens): 
 			x_batch[data_idx, t] = token
-			t_batch[data_idx, token_idx] = token
+	t_batch = x_batch[x_batch > 0].reshape((args.dataset_size, args.true_sequence_length))
 	return x_batch, t_batch
 
 def main():
@@ -122,6 +130,7 @@ def main():
 
 	for epoch in xrange(1, args.total_epoch + 1):
 		# train loop
+		sum_loss = 0
 		with chainer.using_config("train", True):
 			for itr in xrange(1, total_loop + 1):
 				# sample minibatch
@@ -142,6 +151,8 @@ def main():
 				loss = F.connectionist_temporal_classification(y_batch, t_batch, 0, x_batch_length, t_batch_length)
 				optimizer.update(lossfun=lambda: loss)
 
+				sum_loss += float(loss.data)
+
 		# evaluate
 		with chainer.using_config("train", True):
 			# sample minibatch
@@ -160,17 +171,16 @@ def main():
 			y_batch = xp.argmax(y_batch.data, axis=2)
 
 			average_error = 0
-			for argmax_tokens, true_sequence in zip(y_batch, t_batch):
+			for input_sequence, argmax_sequence, true_sequence in zip(x_batch, y_batch, t_batch):
 				pred_seqence = []
-				for token in argmax_tokens:
+				for token in argmax_sequence:
 					if token == 0:
 						continue
 					pred_seqence.append(int(token))
-				print(true_sequence, pred_seqence)
+				print("true:", true_sequence, "pred:", pred_seqence)
 				error = compute_character_error_rate(true_sequence.tolist(), pred_seqence)
 				average_error += error
-			print("CER: {}".format(int(average_error / args.batchsize * 100)))
-
+			print("CER: {} loss: {}".format(int(average_error / args.batchsize * 100), sum_loss / total_loop))
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
@@ -179,7 +189,7 @@ if __name__ == "__main__":
 	parser.add_argument("--learning-rate", "-lr", type=float, default=0.01)
 	parser.add_argument("--vocab-size", "-vocab", type=int, default=50)
 	parser.add_argument("--num-layers", "-layers", type=int, default=1)
-	parser.add_argument("--ndim-embedding", "-ne", type=int, default=50)
+	parser.add_argument("--ndim-embedding", "-ne", type=int, default=100)
 	parser.add_argument("--ndim-h", "-nh", type=int, default=128)
 	parser.add_argument("--true-sequence-length", "-tseq", type=int, default=5)
 	parser.add_argument("--sequence-length", "-seq", type=int, default=30)
